@@ -1,16 +1,35 @@
-# Trash Duty Bot
+# Trash Duty Bot — Automated Task Rotation for Shared Housing
 
-A LINE chatbot that automates weekly trash-duty rotation for shared households, following the PRD v2 spec.
+A LINE chatbot that automates weekly trash-duty rotation for shared households.  
+It assigns responsibilities, sends reminders, and maintains a fair rotation system directly within a group chat.
 
-- **Runtime:** Node.js 20+ / Express / `@line/bot-sdk`
-- **Storage:** SQLite via `better-sqlite3` (single file, WAL mode)
-- **Scheduling:** in-process `node-cron` (minute-resolution, per-group timezone)
-- **Deploy target:** Railway (Dockerfile + `railway.json` included), works on any Docker host.
+**Tech Stack**
+
+Backend: Node.js 20+, Express, @line/bot-sdk  
+Database: SQLite (better-sqlite3, WAL mode)  
+Scheduling: node-cron (minute-level automation)  
+Deployment: Railway (Docker-based cloud hosting)
+
+## Problem
+
+In shared housing environments, managing recurring chores often relies on manual reminders and informal coordination.  
+This can lead to confusion, missed tasks, and uneven workload distribution.
+
+This project was created to automate task scheduling and ensure fair responsibility sharing among household members.
+
+## Key Features
+
+- Automated weekly task assignment
+- Reminder notifications for incomplete tasks
+- Flexible rotation management
+- Support for multiple group chats
+- Persistent cloud deployment
+- Command-based interaction system
 
 ## What it does
 
-- Thursday 09:00 (group TZ): assigns this week's duty to the next active member.
-- Monday 19:00 (group TZ): reminds if the task is still pending.
+- Automatically assigns weekly responsibilities every Thursday at 09:00.
+- If the task is not completed, the system sends a reminder on Monday at 19:00.
 - Inline buttons on the assignment message: **Done**, **Not Free**, **Not at Home**.
 - "Not Free" passes the week to the next active member; the skipper rotates to the back of the line so everyone still does one duty per full cycle.
 - "Not at Home" marks the member inactive (skipped in future rotations). They return with `back`.
@@ -18,7 +37,12 @@ A LINE chatbot that automates weekly trash-duty rotation for shared households, 
 - Supports multiple LINE groups; state is isolated per group.
 - Full audit history available via `history`.
 
-## 1. LINE Developer Console setup
+## Real Usage
+
+This bot is currently deployed in a live shared housing environment and manages weekly trash duty scheduling for household members.
+It runs continuously in the cloud and automatically handles task assignment and reminders without manual coordination.
+
+## Setup Guide (For Developers)
 
 1. Log into [LINE Developers Console](https://developers.line.biz/).
 2. Create a **Provider** (or reuse one), then create a **Messaging API** channel.
@@ -30,7 +54,9 @@ A LINE chatbot that automates weekly trash-duty rotation for shared households, 
    - Set the **Webhook URL** to `https://<your-domain>/webhook` and enable **Use webhook**.
 4. On your phone, scan the channel QR code to add the bot as a friend, then invite it into the group you want to manage.
 
-## 2. Local run
+## Development
+
+Run the following commands to start the bot locally:
 
 ```bash
 cp .env.example .env
@@ -51,7 +77,9 @@ ngrok http 3000
 
 Set the LINE channel's Webhook URL to `<tunnel-host>/webhook` and click **Verify**.
 
-## 3. Deploy to Railway
+## Deployment
+
+The bot is deployed to Railway, a cloud hosting platform that provides automatic scaling and persistent storage.
 
 1. Push this repo to GitHub.
 2. In Railway: **New Project → Deploy from GitHub repo**, select this repo.
@@ -64,7 +92,9 @@ Set the LINE channel's Webhook URL to `<tunnel-host>/webhook` and click **Verify
 
 Use the same Dockerfile. Create a **Web Service** from the repo, add an env group with the LINE variables, and attach a **Disk** mounted at `/app/data`. Set `DATABASE_PATH=/app/data/trashbot.db`. Point the LINE webhook at `https://<service>.onrender.com/webhook`.
 
-## 4. In-group usage
+## In-group usage
+
+The bot is controlled through simple text commands directly in the LINE group.
 
 After adding the bot to a group:
 
@@ -99,7 +129,9 @@ Reference: type `help` in the group for the full command list.
 
 Commands also work with a leading `/`, e.g. `/status`.
 
-## 5. Configuration
+## Configuration
+
+These environment variables control scheduling behavior, database location, and runtime configuration.
 
 | Env var | Default | Notes |
 |---|---|---|
@@ -113,7 +145,9 @@ Commands also work with a leading `/`, e.g. `/status`.
 | `UNDO_WINDOW_HOURS` | `24` | How long a Done click can be undone |
 | `LOG_LEVEL` | `info` | pino log level |
 
-## 6. Architecture
+## System Architecture
+
+The system follows an event-driven architecture using LINE webhooks.
 
 ```
 LINE Platform
@@ -128,7 +162,9 @@ scheduler.js  — minutely tick that fires Thursday 09:00 and Monday 19:00 per g
 models/*.js   — thin SQL wrappers over better-sqlite3
 ```
 
-## 7. Rotation semantics (important)
+## Rotation semantics (important)
+
+This logic ensures fairness across all members in the rotation.
 
 **Not Free (this-week-only pass)**
 
@@ -149,21 +185,31 @@ Marks the user inactive. If they're the current assignee, it triggers the same r
 
 If a week turns over with a task still `pending`, the Thursday assignment job marks the prior task `overdue` and creates a fresh assignment. Admin can also run `force <name>` at any time to override.
 
-## 8. Operations
+## Operations
+
+These operational practices ensure system reliability and data safety in production environments.
 
 - **Backups.** The SQLite file is at `DATABASE_PATH`. For Railway volumes, snapshot regularly or add a daily `sqlite3 backup` job. For disaster recovery, copy the `.db` file while the app is running — SQLite WAL mode makes this safe.
 - **Logs.** Structured JSON via pino. In dev, pretty-printed. Ship to your log backend of choice.
 - **Healthcheck.** `GET /healthz` returns `{ok: true}`.
 - **Signature validation.** The LINE middleware rejects tampered webhooks with HTTP 401.
 
-## 9. Security & privacy
+## Security & privacy
 
 - Only LINE user IDs, display names, and rotation state are stored — no PII beyond what LINE provides.
 - Admin is whoever first ran `setup` in a given group; other admin-only commands reject non-admins.
 - The `/webhook` endpoint validates `X-Line-Signature` with HMAC-SHA256 against `LINE_CHANNEL_SECRET`.
 
-## 10. Known limits
+## Known Limitations
 
 - LINE groups cap at 500 members, but the PRD limits rotation to 20; no enforcement in code — add if needed.
 - Reminder sends are per-group push messages, which count against your LINE channel's monthly push quota.
 - Minute-resolution scheduler: assignments fire within 60s of the target minute.
+
+## Future Improvements
+
+- Support multiple household tasks
+- Custom reminder scheduling
+- Admin dashboard
+- Usage analytics
+- Web configuration interface
